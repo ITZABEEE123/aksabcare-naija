@@ -1,0 +1,789 @@
+// 🏥 AKSABHEALTH NG - DATABASE SCHEMA DEFINITION
+// ===============================================
+// This Prisma schema defines the entire database structure for our healthcare platform.
+// Think of this as the "blueprint" that tells our database how to organize all the medical data.
+//
+// 🗂️ WHAT THIS SCHEMA MANAGES:
+// - User accounts (patients, doctors, admins)
+// - Medical appointments and consultations  
+// - Payment processing and billing
+// - Hospital and pharmacy information
+// - Chat messages between patients and doctors
+// - AI-powered health guidance conversations
+// - Prescription and medication management
+// - Reviews and ratings system
+//
+// 🏗️ SCHEMA STRUCTURE:
+// Each "model" represents a table in our database
+// Relationships connect different types of data together
+// For example: A Patient can have many Appointments, each Appointment belongs to one Doctor
+
+// ⚙️ PRISMA CLIENT GENERATOR
+// ===========================
+// This generates the TypeScript client code that our app uses to talk to the database
+// It creates type-safe functions for all database operations (create, read, update, delete)
+generator client {
+  provider = "prisma-client-js"  // Generate JavaScript/TypeScript client
+}
+
+// 🗄️ DATABASE CONNECTION CONFIGURATION
+// ====================================
+// Connects to our PostgreSQL database using the connection string from environment variables
+// PostgreSQL is chosen for healthcare because:
+// - ACID compliance (data integrity is crucial for medical records)
+// - Strong consistency guarantees
+// - Excellent support for complex relationships
+// - Battle-tested reliability in healthcare systems
+datasource db {
+  provider = "postgresql"           // Database type: PostgreSQL
+  url      = env("DATABASE_URL")    // Connection string from .env file
+}
+
+// 👤 USER MODEL - THE FOUNDATION OF OUR SYSTEM
+// ============================================
+// Every person using our platform starts as a User
+// This model stores core authentication and account information
+// Users can have different roles: PATIENT (seeks care), DOCTOR (provides care), ADMIN (manages system)
+model User {
+  // 🆔 UNIQUE IDENTIFIERS AND AUTHENTICATION
+  id            String         @id @default(cuid())     // Unique user ID (collision-resistant unique identifier)
+  email         String         @unique                  // Email address (must be unique across all users)
+  password      String                                  // Hashed password (never stored in plain text!)
+  
+  // 🎭 ROLE AND STATUS MANAGEMENT
+  role          UserRole                                // PATIENT, DOCTOR, or ADMIN (determines app permissions)
+  isActive      Boolean        @default(true)          // Can this user access the system? (for account suspension)
+  isVerified    Boolean        @default(false)         // Has the user verified their email? (security requirement)
+  
+  // ⏰ TIMESTAMP TRACKING
+  createdAt     DateTime       @default(now())         // When was this account created?
+  updatedAt     DateTime       @updatedAt              // When was this account last modified?
+  
+  // 🔗 RELATIONSHIPS TO OTHER MODELS
+  // ================================
+  // One user can have different professional/personal profiles depending on their role
+  doctor        Doctor?                                // If user is a doctor → link to doctor profile
+  hospitalAdmin HospitalAdmin?                        // If user is hospital admin → link to admin profile  
+  patient       Patient?                              // If user is patient → link to medical records
+  pharmacyAdmin PharmacyAdmin?                        // If user is pharmacy admin → link to pharmacy profile
+  
+  // 📊 ACTIVITY AND TRANSACTION TRACKING
+  Payment       Payment[]                             // All payments this user has made
+  activities    UserActivity[]                        // Log of user actions (for security/analytics)
+  profile       UserProfile?                          // Personal information (name, phone, address, etc.)
+  
+  // 🤖 AI AND COMMUNICATION FEATURES  
+  aiGuideConversations AiGuideConversation[]          // Conversations with our AI health assistant
+  passwordResets PasswordReset[]                      // Password reset requests (for account recovery)
+  notifications  Notification[]                       // User notifications and alerts
+
+  @@map("users")  // Database table name
+}
+
+// 👤 USER PROFILE MODEL - PERSONAL INFORMATION
+// ============================================
+// Stores detailed personal information for any user (regardless of role)
+// Separated from User model to keep authentication data separate from personal data
+model UserProfile {
+  // 🆔 IDENTIFIERS AND BASIC INFO
+  id                           String    @id @default(cuid())    // Unique profile ID
+  userId                       String    @unique                 // Links to User model (one-to-one relationship)
+  firstName                    String                            // User's first name
+  lastName                     String                            // User's last name
+  phone                        String?                           // Phone number (optional)
+  avatar                       String?                           // Profile picture URL (optional)
+  
+  // 🎂 DEMOGRAPHIC INFORMATION
+  dateOfBirth                  DateTime?                         // Birth date (for age-appropriate care)
+  gender                       Gender?                           // Gender identity (medical relevance)
+  
+  // 🚨 EMERGENCY CONTACT INFORMATION
+  // ===============================
+  // Critical for healthcare platforms - who to contact in medical emergencies
+  emergencyContactName         String?                           // Emergency contact's full name
+  emergencyContactPhone        String?                           // Emergency contact's phone number  
+  emergencyContactRelationship String?                           // Relationship (spouse, parent, sibling, etc.)
+  
+  // 🏠 ADDRESS INFORMATION
+  address                      Address?                          // Home address (for location-based services)
+  
+  // 🔗 RELATIONSHIP BACK TO USER
+  user                         User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("user_profiles")  // Database table name
+}
+
+model Address {
+  id            String       @id @default(cuid())
+  street        String
+  city          String
+  state         String
+  country       String       @default("Nigeria")
+  postalCode    String?
+  latitude      Float?
+  longitude     Float?
+  userProfileId String?      @unique
+  hospitalId    String?      @unique
+  pharmacyId    String?      @unique
+  hospital      Hospital?    @relation(fields: [hospitalId], references: [id])
+  pharmacy      Pharmacy?    @relation(fields: [pharmacyId], references: [id])
+  userProfile   UserProfile? @relation(fields: [userProfileId], references: [id])
+
+  @@map("addresses")
+}
+
+model UserActivity {
+  id        String   @id @default(cuid())
+  userId    String
+  action    String
+  details   Json?
+  ipAddress String?
+  userAgent String?
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("user_activities")
+}
+
+model Patient {
+  id                 String             @id @default(cuid())
+  userId             String             @unique
+  bloodGroup         BloodGroup?
+  allergies          String?
+  medicalHistory     String?
+  currentMedications String?
+  insurance          Json?
+  appointments       Appointment[]
+  consultationChats  ConsultationChat[]
+  DoctorReview       DoctorReview[]
+  DrugOrder          DrugOrder[]
+  HospitalReview     HospitalReview[]
+  medicalRecords     MedicalRecord[]
+  user               User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  prescriptions      Prescription[]
+  receivedReminders  DoctorReminder[]   // Reminders received by this patient
+
+  @@map("patients")
+}
+
+model Hospital {
+  id                   String            @id @default(cuid())
+  name                 String
+  description          String?
+  facilityLevel        FacilityLevel
+  ownershipType        OwnershipType
+  isVerified           Boolean           @default(false)
+  isEmergencyAvailable Boolean           @default(false)
+  licenseNumber        String?           @unique
+  establishedYear      Int?
+  phone                String
+  email                String?
+  website              String?
+  operatingHours       Json
+  specializations      String[]
+  images               String[]
+  rating               Float             @default(0)
+  totalReviews         Int               @default(0)
+  createdAt            DateTime          @default(now())
+  updatedAt            DateTime          @updatedAt
+  address              Address?
+  appointments         Appointment[]
+  doctors              DoctorHospital[]
+  admins               HospitalAdmin[]
+  reviews              HospitalReview[]
+  services             HospitalService[]
+
+  @@map("hospitals")
+}
+
+model HospitalAdmin {
+  id         String   @id @default(cuid())
+  userId     String   @unique
+  hospitalId String
+  role       String   @default("admin")
+  hospital   Hospital @relation(fields: [hospitalId], references: [id], onDelete: Cascade)
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, hospitalId])
+  @@map("hospital_admins")
+}
+
+model HospitalService {
+  id          String          @id @default(cuid())
+  hospitalId  String
+  name        String
+  description String?
+  category    ServiceCategory
+  price       Float?
+  currency    String          @default("NGN")
+  isAvailable Boolean         @default(true)
+  hospital    Hospital        @relation(fields: [hospitalId], references: [id], onDelete: Cascade)
+
+  @@map("hospital_services")
+}
+
+model HospitalReview {
+  id         String   @id @default(cuid())
+  hospitalId String
+  patientId  String
+  rating     Int
+  comment    String?
+  createdAt  DateTime @default(now())
+  hospital   Hospital @relation(fields: [hospitalId], references: [id], onDelete: Cascade)
+  patient    Patient  @relation(fields: [patientId], references: [id], onDelete: Cascade)
+
+  @@unique([hospitalId, patientId])
+  @@map("hospital_reviews")
+}
+
+model Doctor {
+  id                 String               @id @default(cuid())
+  userId             String               @unique
+  licenseNumber      String               @unique
+  specialization     String
+  subSpecializations String[]
+  experience         Int
+  country            String               @default("Nigeria")
+  consultationFee    Float
+  currency           String               @default("NGN")
+  isAvailable        Boolean              @default(true)
+  languages          String[]
+  bio                String?
+  education          Json
+  certifications     Json
+  rating             Float                @default(0)
+  totalConsultations Int                  @default(0)
+  createdAt          DateTime             @default(now())
+  updatedAt          DateTime             @updatedAt
+  appointments       Appointment[]
+  consultationChats  ConsultationChat[]
+  availability       DoctorAvailability[]
+  hospitals          DoctorHospital[]
+  reviews            DoctorReview[]
+  user               User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
+  medicalRecords     MedicalRecord[]
+  prescriptions      Prescription[]
+  sentReminders      DoctorReminder[]     // Reminders sent by this doctor
+
+  @@map("doctors")
+}
+
+model DoctorAvailability {
+  id        String  @id @default(cuid())
+  doctorId  String
+  dayOfWeek Int
+  startTime String
+  endTime   String
+  timezone  String  @default("Africa/Lagos")
+  isActive  Boolean @default(true)
+  doctor    Doctor  @relation(fields: [doctorId], references: [id], onDelete: Cascade)
+
+  @@unique([doctorId, dayOfWeek, startTime])
+  @@map("doctor_availability")
+}
+
+model DoctorHospital {
+  id         String   @id @default(cuid())
+  doctorId   String
+  hospitalId String
+  isActive   Boolean  @default(true)
+  createdAt  DateTime @default(now())
+  doctor     Doctor   @relation(fields: [doctorId], references: [id], onDelete: Cascade)
+  hospital   Hospital @relation(fields: [hospitalId], references: [id], onDelete: Cascade)
+
+  @@unique([doctorId, hospitalId])
+  @@map("doctor_hospitals")
+}
+
+model DoctorReview {
+  id        String   @id @default(cuid())
+  doctorId  String
+  patientId String
+  rating    Int
+  comment   String?
+  createdAt DateTime @default(now())
+  doctor    Doctor   @relation(fields: [doctorId], references: [id], onDelete: Cascade)
+  patient   Patient  @relation(fields: [patientId], references: [id], onDelete: Cascade)
+
+  @@unique([doctorId, patientId])
+  @@map("doctor_reviews")
+}
+
+model Appointment {
+  id            String            @id @default(cuid())
+  patientId     String
+  doctorId      String
+  hospitalId    String?
+  type          AppointmentType
+  status        AppointmentStatus @default(SCHEDULED)
+  scheduledDate DateTime
+  duration      Int               @default(30)
+  fee           Float
+  currency      String            @default("NGN")
+  symptoms      String?
+  notes         String?
+  meetingUrl    String?
+  meetingId     String?
+  completedAt   DateTime?         // Track when consultation was completed
+  cancelledAt   DateTime?         // Track when appointment was cancelled
+  createdAt     DateTime          @default(now())
+  updatedAt     DateTime          @updatedAt
+  doctor        Doctor            @relation(fields: [doctorId], references: [id], onDelete: Cascade)
+  hospital      Hospital?         @relation(fields: [hospitalId], references: [id])
+  patient       Patient           @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  consultation  ConsultationChat?
+  medicalRecord MedicalRecord?
+  payment       Payment?
+  reminders     DoctorReminder[]      // Reminders related to this appointment
+
+  @@map("appointments")
+}
+
+model MedicalRecord {
+  id            String         @id @default(cuid())
+  appointmentId String         @unique
+  patientId     String
+  doctorId      String
+  diagnosis     String
+  symptoms      String?
+  vitalSigns    Json?
+  notes         String?
+  followUpDate  DateTime?
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+  appointment   Appointment    @relation(fields: [appointmentId], references: [id], onDelete: Cascade)
+  doctor        Doctor         @relation(fields: [doctorId], references: [id], onDelete: Cascade)
+  patient       Patient        @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  prescriptions Prescription[]
+
+  @@map("medical_records")
+}
+
+model Drug {
+  id                   String              @id @default(cuid())
+  name                 String
+  genericName          String?
+  brandName            String?
+  manufacturer         String
+  nafdacNumber         String              @unique
+  category             DrugCategory
+  dosageForm           String
+  strength             String
+  activeIngredients    String[]
+  isControlled         Boolean             @default(false)
+  requiresPrescription Boolean             @default(true)
+  description          String?
+  sideEffects          String?
+  contraindications    String?
+  images               String[]
+  createdAt            DateTime            @default(now())
+  updatedAt            DateTime            @updatedAt
+  DrugOrderItem        DrugOrderItem[]
+  pharmacyInventory    PharmacyInventory[]
+  prescriptions        PrescriptionDrug[]
+
+  @@map("drugs")
+}
+
+model Prescription {
+  id              String             @id @default(cuid())
+  medicalRecordId String
+  patientId       String
+  doctorId        String
+  instructions    String?
+  createdAt       DateTime           @default(now())
+  updatedAt       DateTime           @updatedAt
+  drugs           PrescriptionDrug[]
+  doctor          Doctor             @relation(fields: [doctorId], references: [id], onDelete: Cascade)
+  medicalRecord   MedicalRecord      @relation(fields: [medicalRecordId], references: [id], onDelete: Cascade)
+  patient         Patient            @relation(fields: [patientId], references: [id], onDelete: Cascade)
+
+  @@map("prescriptions")
+}
+
+model PrescriptionDrug {
+  id             String       @id @default(cuid())
+  prescriptionId String
+  drugId         String
+  dosage         String
+  frequency      String
+  duration       String
+  instructions   String?
+  quantity       Int
+  drug           Drug         @relation(fields: [drugId], references: [id], onDelete: Cascade)
+  prescription   Prescription @relation(fields: [prescriptionId], references: [id], onDelete: Cascade)
+
+  @@map("prescription_drugs")
+}
+
+model Pharmacy {
+  id             String              @id @default(cuid())
+  name           String
+  licenseNumber  String              @unique
+  phone          String
+  email          String?
+  isVerified     Boolean             @default(false)
+  operatingHours Json
+  createdAt      DateTime            @default(now())
+  updatedAt      DateTime            @updatedAt
+  address        Address?
+  orders         DrugOrder[]
+  admins         PharmacyAdmin[]
+  inventory      PharmacyInventory[]
+
+  @@map("pharmacies")
+}
+
+model PharmacyAdmin {
+  id         String   @id @default(cuid())
+  userId     String   @unique
+  pharmacyId String
+  role       String   @default("admin")
+  pharmacy   Pharmacy @relation(fields: [pharmacyId], references: [id], onDelete: Cascade)
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, pharmacyId])
+  @@map("pharmacy_admins")
+}
+
+model PharmacyInventory {
+  id          String   @id @default(cuid())
+  pharmacyId  String
+  drugId      String
+  quantity    Int
+  price       Float
+  currency    String   @default("NGN")
+  expiryDate  DateTime
+  batchNumber String
+  isAvailable Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  drug        Drug     @relation(fields: [drugId], references: [id], onDelete: Cascade)
+  pharmacy    Pharmacy @relation(fields: [pharmacyId], references: [id], onDelete: Cascade)
+
+  @@unique([pharmacyId, drugId, batchNumber])
+  @@map("pharmacy_inventory")
+}
+
+model DrugOrder {
+  id              String          @id @default(cuid())
+  patientId       String
+  pharmacyId      String
+  prescriptionId  String?
+  status          OrderStatus     @default(PENDING)
+  totalAmount     Float
+  currency        String          @default("NGN")
+  deliveryAddress String
+  deliveryPhone   String
+  deliveryNotes   String?
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+  items           DrugOrderItem[]
+  patient         Patient         @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  pharmacy        Pharmacy        @relation(fields: [pharmacyId], references: [id], onDelete: Cascade)
+  payment         Payment?
+
+  @@map("drug_orders")
+}
+
+model DrugOrderItem {
+  id         String    @id @default(cuid())
+  orderId    String
+  drugId     String
+  quantity   Int
+  unitPrice  Float
+  totalPrice Float
+  drug       Drug      @relation(fields: [drugId], references: [id], onDelete: Cascade)
+  order      DrugOrder @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  @@map("drug_order_items")
+}
+
+model Payment {
+  id            String          @id @default(cuid())
+  userId        String
+  appointmentId String?         @unique
+  orderID       String?         @unique
+  amount        Float
+  currency      String          @default("NGN")
+  status        PaymentStatus   @default(PENDING)
+  method        PaymentMethod
+  provider      PaymentProvider
+  reference     String          @unique
+  providerRef   String?
+  metadata      Json?
+  description   String
+  createdAt     DateTime        @default(now())
+  updatedAt     DateTime        @updatedAt
+  appointment   Appointment?    @relation(fields: [appointmentId], references: [id])
+  order         DrugOrder?      @relation(fields: [orderID], references: [id])
+  user          User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("payments")
+}
+
+model ConsultationChat {
+  id            String        @id @default(cuid())
+  appointmentId String        @unique
+  patientId     String
+  doctorId      String
+  startTime     DateTime?
+  endTime       DateTime?
+  isActive      Boolean       @default(false)
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+  messages      ChatMessage[]
+  appointment   Appointment   @relation(fields: [appointmentId], references: [id], onDelete: Cascade)
+  doctor        Doctor        @relation(fields: [doctorId], references: [id], onDelete: Cascade)
+  patient       Patient       @relation(fields: [patientId], references: [id], onDelete: Cascade)
+
+  @@map("consultation_chats")
+}
+
+model ChatMessage {
+  id             String           @id @default(cuid())
+  consultationId String
+  senderId       String
+  senderRole     UserRole
+  type           MessageType      @default(TEXT)
+  content        String
+  fileUrl        String?
+  metadata       Json?
+  isRead         Boolean          @default(false)
+  createdAt      DateTime         @default(now())
+  consultation   ConsultationChat @relation(fields: [consultationId], references: [id], onDelete: Cascade)
+
+  @@map("chat_messages")
+}
+
+model SystemConfig {
+  id          String   @id @default(cuid())
+  key         String   @unique
+  value       String
+  description String?
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@map("system_config")
+}
+
+enum UserRole {
+  PATIENT
+  DOCTOR
+  HOSPITAL_ADMIN
+  PHARMACY_ADMIN
+  SUPER_ADMIN
+}
+
+enum Gender {
+  MALE
+  FEMALE
+  OTHER
+  PREFER_NOT_TO_SAY
+}
+
+enum BloodGroup {
+  A_POSITIVE
+  A_NEGATIVE
+  B_POSITIVE
+  B_NEGATIVE
+  AB_POSITIVE
+  AB_NEGATIVE
+  O_POSITIVE
+  O_NEGATIVE
+}
+
+enum FacilityLevel {
+  PRIMARY
+  SECONDARY
+  TERTIARY
+}
+
+enum OwnershipType {
+  PUBLIC
+  PRIVATE
+  FAITH_BASED
+  NGO
+}
+
+enum ServiceCategory {
+  CONSULTATION
+  DIAGNOSTIC
+  SURGERY
+  EMERGENCY
+  MATERNITY
+  PEDIATRIC
+  MENTAL_HEALTH
+  DENTAL
+  RADIOLOGY
+  LABORATORY
+}
+
+enum AppointmentType {
+  VIDEO_CONSULTATION
+  AUDIO_CONSULTATION
+  CHAT_CONSULTATION
+  IN_PERSON
+}
+
+enum AppointmentStatus {
+  SCHEDULED
+  CONFIRMED
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+  NO_SHOW
+  RESCHEDULED
+}
+
+enum DrugCategory {
+  ANTIBIOTIC
+  ANALGESIC
+  ANTIHYPERTENSIVE
+  ANTIDIABETIC
+  ANTIMALARIAL
+  VITAMIN
+  SUPPLEMENT
+  PSYCHOTROPIC
+  CARDIOVASCULAR
+  RESPIRATORY
+  OTHER
+}
+
+enum OrderStatus {
+  PENDING
+  CONFIRMED
+  PROCESSING
+  SHIPPED
+  DELIVERED
+  CANCELLED
+}
+
+enum PaymentStatus {
+  PENDING
+  SUCCESSFUL
+  FAILED
+  REFUNDED
+  CANCELLED
+}
+
+enum PaymentMethod {
+  CARD
+  BANK_TRANSFER
+  USSD
+  MOBILE_MONEY
+  WALLET
+}
+
+enum PaymentProvider {
+  FLUTTERWAVE
+  PAYSTACK
+}
+
+enum MessageType {
+  TEXT
+  IMAGE
+  FILE
+  PRESCRIPTION
+  VITAL_SIGNS
+}
+
+model AiGuideConversation {
+  id          String   @id @default(cuid())
+  userId      String
+  userMessage String   @db.Text
+  aiResponse  String   @db.Text
+  timestamp   DateTime @default(now())
+  sessionId   String?
+  language    String?  @default("english")
+
+  // Relations
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("ai_guide_conversations")
+}
+
+model PasswordReset {
+  id        String   @id @default(cuid())
+  userId    String
+  token     String   @unique
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+  usedAt    DateTime?
+
+  // Relations
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("password_resets")
+}
+
+// 🔔 NOTIFICATION SYSTEM
+// ======================
+// Manages notifications for patients (appointment reminders, updates, etc.)
+model Notification {
+  id          String            @id @default(cuid())
+  userId      String            // The user who should receive the notification
+  type        NotificationType
+  title       String
+  message     String
+  relatedId   String?           // ID of related entity (appointment, reminder, etc.)
+  relatedType String?           // Type of related entity (appointment, reminder, etc.)
+  isRead      Boolean          @default(false)
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+
+  // Relations
+  user        User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  doctorReminder DoctorReminder? // The reminder that created this notification
+
+  @@map("notifications")
+}
+
+// 📩 DOCTOR REMINDER SYSTEM
+// =========================
+// Tracks reminders sent by doctors to patients
+model DoctorReminder {
+  id            String          @id @default(cuid())
+  doctorId      String
+  patientId     String
+  appointmentId String
+  type          ReminderType    @default(APPOINTMENT)
+  message       String
+  sentAt        DateTime        @default(now())
+  status        ReminderStatus  @default(SENT)
+  notificationId String?        @unique // Link to the notification created for the patient
+
+  // Relations
+  doctor        Doctor          @relation(fields: [doctorId], references: [id], onDelete: Cascade)
+  patient       Patient         @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  appointment   Appointment     @relation(fields: [appointmentId], references: [id], onDelete: Cascade)
+  notification  Notification?   @relation(fields: [notificationId], references: [id])
+
+  @@map("doctor_reminders")
+}
+
+// 📱 NOTIFICATION ENUMS
+// ====================
+enum NotificationType {
+  APPOINTMENT_REMINDER
+  APPOINTMENT_UPDATE
+  APPOINTMENT_CANCELLED
+  DOCTOR_MESSAGE
+  SYSTEM_ALERT
+  PAYMENT_CONFIRMATION
+}
+
+enum ReminderType {
+  APPOINTMENT
+  FOLLOW_UP
+  MEDICATION
+  GENERAL
+}
+
+enum ReminderStatus {
+  SENT
+  DELIVERED
+  FAILED
+  READ
+}

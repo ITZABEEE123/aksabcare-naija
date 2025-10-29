@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Appointment Cancelled - AksabHealth</title>
+  <style>
+    body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; margin: 0; padding: 0; }
+    .container { max-width: 600px; margin: 0 auto; background: #ffffff; }
+    .header { background: #DC2626; padding: 30px; text-align: center; color: white; }
+    .content { padding: 30px; }
+    .appointment-card { background: #FEF2F2; padding: 20px; border-radius: 12px; margin: 20px 0; border-left: 4px solid #DC2626; }
+    .rebook-link { text-align: center; margin: 30px 0; }
+    .rebook-link a { background: #3B82F6; color: white; padding: 15px 30px; text-decoration: none; border-radius: 8px; font-weight: bold; display: inline-block; }
+    .footer { text-align: center; color: #6B7280; padding: 20px; font-size: 14px; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <h1 style="margin: 0; font-size: 28px;">Appointment Cancelled</h1>
+      <p style="margin: 10px 0 0 0; opacity: 0.9;">We're sorry for any inconvenience</p>
+    </div>
+    
+    <div class="content">
+      <p>Dear {{patientName}},</p>
+      
+      <p>We regret to inform you that your appointment with {{doctorName}} has been cancelled.</p>
+      
+      <div class="appointment-card">
+        <h3 style="margin-top: 0; color: #1F2937;">Cancelled Appointment Details</h3>
+        <p><strong>Doctor:</strong> {{doctorName}}</p>
+        <p><strong>Date:</strong> {{appointmentDate}}</p>
+        <p><strong>Time:</strong> {{appointmentTime}}</p>
+        <p><strong>Reason:</strong> {{reason}}</p>
+      </div>
+
+      <p><strong>What happens next?</strong></p>
+      <ul>
+        <li>Full refund will be processed within 3-5 business days</li>
+        <li>You'll receive a refund confirmation email</li>
+        <li>You can book another appointment immediately</li>
+      </ul>
+
+      <div class="rebook-link">
+        <a href="{{rebookUrl}}" target="_blank">Book Another Appointment</a>
+      </div>
+
+      <p>We sincerely apologize for this inconvenience. Our team is committed to providing you with the best healthcare experience.</p>
+      
+      <p>If you have any questions or concerns, please don't hesitate to reach out to us at {{supportEmail}} or call +234-XXX-XXXX.</p>
+      
+      <p>Thank you for your understanding.</p>
+      
+      <p>Best regards,<br>
+      <strong>The AksabHealth Team</strong></p>
+    </div>
+    
+    <div class="footer">
+      <p>© 2024 AksabHealth. All rights reserved.</p>
+      <p>Need help? Contact us at {{supportEmail}}</p>
+    </div>
+  </div>
+</body>
+</html>
